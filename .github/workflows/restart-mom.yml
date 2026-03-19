@@ -1,0 +1,48 @@
+name: Restart Mom Studio
+
+on:
+  schedule:
+    - cron: '55 */3 * * *'  # Every 3h55m UTC
+  workflow_dispatch:
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install lightning-sdk
+        run: pip install lightning-sdk
+
+      - name: Start Mom Studio
+        env:
+          LIGHTNING_USER_ID: ${{ secrets.LIGHTNING_USER_ID }}
+          LIGHTNING_API_KEY: ${{ secrets.LIGHTNING_API_KEY }}
+          LIGHTNING_USERNAME: ${{ secrets.LIGHTNING_USERNAME }}
+          STUDIO_NAME: ${{ secrets.STUDIO_NAME }}
+          TEAMSPACE: ${{ secrets.TEAMSPACE }}
+        run: |
+          python -c "
+          import os
+          from lightning_sdk import Studio
+
+          os.environ[\"LIGHTNING_USER_ID\"] = \"${LIGHTNING_USER_ID}\"
+          os.environ[\"LIGHTNING_API_KEY\"] = \"${LIGHTNING_API_KEY}\"
+          os.environ[\"LIGHTNING_USERNAME\"] = \"${LIGHTNING_USERNAME}\"
+
+          s = Studio(
+              name=\"${STUDIO_NAME}\",
+              teamspace=\"${TEAMSPACE}\",
+              user=\"${LIGHTNING_USERNAME}\",
+          )
+
+          print(\"Studio status:\", s.status)
+          s.start()
+          print(\"After start:\", s.status)
+          "
