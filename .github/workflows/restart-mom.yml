@@ -20,7 +20,7 @@ jobs:
       - name: Install lightning-sdk
         run: pip install lightning-sdk
 
-      - name: Start Mom Studio
+      - name: Restart Mom Studio
         env:
           LIGHTNING_USER_ID: ${{ secrets.LIGHTNING_USER_ID }}
           LIGHTNING_API_KEY: ${{ secrets.LIGHTNING_API_KEY }}
@@ -42,7 +42,16 @@ jobs:
               user=\"${LIGHTNING_USERNAME}\",
           )
 
-          print(\"Studio status:\", s.status)
+          print(\"Studio status before restart:\", s.status)
+          
+          # Stop the studio if it's running
+          if s.status != 'stopped':
+              print(\"Stopping studio...\")
+              s.stop()
+              print(\"Studio stopped:\", s.status)
+          
+          # Start the studio
+          print(\"Starting studio...\")
           s.start()
-          print(\"After start:\", s.status)
+          print(\"Studio status after restart:\", s.status)
           "
