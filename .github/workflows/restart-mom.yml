@@ -2,7 +2,9 @@ name: Restart Mom Studio
 
 on:
   schedule:
-    - cron: '55 */3 * * *'  # Every 3h55m UTC
+    # Every 2.5 hours: 0:00, 2:30, 5:00, 7:30, 10:00, 12:30, 15:00, 17:30, 20:00, 22:30
+    - cron: '0 0,5,10,15,20 * * *'
+    - cron: '30 2,7,12,17,22 * * *'
   workflow_dispatch:
 
 jobs:
@@ -28,30 +30,59 @@ jobs:
           STUDIO_NAME: ${{ secrets.STUDIO_NAME }}
           TEAMSPACE: ${{ secrets.TEAMSPACE }}
         run: |
-          python -c "
+          python << 'EOF'
           import os
+          import time
+
+          os.environ["LIGHTNING_USER_ID"] = os.environ.get("LIGHTNING_USER_ID", "")
+          os.environ["LIGHTNING_API_KEY"] = os.environ.get("LIGHTNING_API_KEY", "")
+          os.environ["LIGHTNING_USERNAME"] = os.environ.get("LIGHTNING_USERNAME", "")
+
           from lightning_sdk import Studio
 
-          os.environ[\"LIGHTNING_USER_ID\"] = \"${LIGHTNING_USER_ID}\"
-          os.environ[\"LIGHTNING_API_KEY\"] = \"${LIGHTNING_API_KEY}\"
-          os.environ[\"LIGHTNING_USERNAME\"] = \"${LIGHTNING_USERNAME}\"
+          studio_name = os.environ.get("STUDIO_NAME", "")
+          teamspace = os.environ.get("TEAMSPACE", "")
+          username = os.environ.get("LIGHTNING_USERNAME", "")
 
-          s = Studio(
-              name=\"${STUDIO_NAME}\",
-              teamspace=\"${TEAMSPACE}\",
-              user=\"${LIGHTNING_USERNAME}\",
-          )
+          try:
+              s = Studio(name=studio_name, teamspace=teamspace, user=username)
+          except Exception as e:
+              print(f"Failed to connect to studio: {e}")
+              raise
 
-          print(\"Studio status before restart:\", s.status)
-          
-          # Stop the studio if it's running
-          if s.status != 'stopped':
-              print(\"Stopping studio...\")
-              s.stop()
-              print(\"Studio stopped:\", s.status)
-          
-          # Start the studio
-          print(\"Starting studio...\")
-          s.start()
-          print(\"Studio status after restart:\", s.status)
-          "
+          # --- Check current status ---
+          try:
+              status = s.status
+              print(f"Studio status: {status}")
+          except Exception as e:
+              print(f"Could not read status (studio may be down): {e}")
+              status = "unknown"
+
+          # --- Stop if not already stopped ---
+          if status not in ("stopped", "unknown"):
+              try:
+                  print("Stopping studio...")
+                  s.stop()
+                  # Give it time to fully stop
+                  time.sleep(30)
+                  print("Studio stopped.")
+              except Exception as e:
+                  print(f"Stop failed (may already be stopped): {e}")
+                  time.sleep(10)
+
+          # --- Start with retries ---
+          max_retries = 3
+          for attempt in range(1, max_retries + 1):
+              try:
+                  print(f"Starting studio (attempt {attempt}/{max_retries})...")
+                  s.start()
+                  print(f"Studio status after start: {s.status}")
+                  break
+              except Exception as e:
+                  print(f"Start attempt {attempt} failed: {e}")
+                  if attempt < max_retries:
+                      time.sleep(30)
+                  else:
+                      print("All start attempts failed.")
+                      raise
+          EOF
